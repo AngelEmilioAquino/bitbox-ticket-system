@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="002-create-events" author="bitbox">
+        <createTable tableName="events">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_events"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_date" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_tickets" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="available_tickets" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <!--
+        Database-level safety net against overselling: even if application-level
+        concurrency control had a bug, PostgreSQL rejects any negative stock.
+    -->
+    <changeSet id="002-events-check-constraints" author="bitbox">
+        <sql>
+            ALTER TABLE events
+                ADD CONSTRAINT ck_events_total_tickets_positive CHECK (total_tickets > 0);
+            ALTER TABLE events
+                ADD CONSTRAINT ck_events_available_tickets_range
+                    CHECK (available_tickets &gt;= 0 AND available_tickets &lt;= total_tickets);
+        </sql>
+        <rollback>
+            ALTER TABLE events DROP CONSTRAINT ck_events_available_tickets_range;
+            ALTER TABLE events DROP CONSTRAINT ck_events_total_tickets_positive;
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

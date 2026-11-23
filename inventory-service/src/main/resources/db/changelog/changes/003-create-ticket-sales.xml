@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="003-create-ticket-sales" author="bitbox">
+        <createTable tableName="ticket_sales">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_ticket_sales"/>
+            </column>
+            <column name="purchase_date" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_id" type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_ticket_sales_event"
+                             references="events(id)"/>
+            </column>
+            <column name="user_id" type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_ticket_sales_user"
+                             references="users(id)"/>
+            </column>
+        </createTable>
+
+        <!-- PostgreSQL does not index foreign keys automatically; the stats query groups/joins by them -->
+        <createIndex tableName="ticket_sales" indexName="ix_ticket_sales_event_id">
+            <column name="event_id"/>
+        </createIndex>
+        <createIndex tableName="ticket_sales" indexName="ix_ticket_sales_user_id">
+            <column name="user_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

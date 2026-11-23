@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ticket-gateway-service
+  webflux:
+    problemdetails:
+      enabled: true
+
+gateway:
+  inventory:
+    base-url: ${INVENTORY_BASE_URL:http://localhost:8081}
+    connect-timeout: 2s
+    # Upper bound for a whole call to inventory-service (connect + response + body)
+    timeout: ${INVENTORY_TIMEOUT:5s}
+  stream:
+    interval: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
