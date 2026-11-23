@@ -31,39 +31,45 @@ Puertos libres: `8080`, `8081` y `5432` (el de PostgreSQL se puede cambiar con `
 
 ## Levantar el proyecto
 
+### Desarrollo (un solo comando, sin configuración)
+
 ```bash
 docker compose up -d --build --wait
 ```
 
-Con eso se construyen las imágenes, se arranca PostgreSQL, se aplican las migraciones de Liquibase y se espera a que los tres contenedores estén *healthy*. No hace falta ninguna configuración previa: todas las variables tienen valores por defecto de desarrollo.
+Compose carga automáticamente `docker-compose.override.yml` (overlay de desarrollo). Ese comando construye las imágenes, arranca PostgreSQL, aplica las migraciones de Liquibase y espera a que los tres contenedores estén *healthy*. inventory corre con el perfil Spring `dev`, que trae credenciales y un secreto JWT de desarrollo, públicos y predecibles a propósito. Por comodidad se publican también `8081` (inventory) y `5432` (PostgreSQL).
 
-Para personalizarlas:
+Parar y borrar los datos: `docker compose down -v`.
 
-```bash
-cp .env.example .env   # editar JWT_SECRET, credenciales de BD, etc.
-```
-
-| Variable | Por defecto | Descripción |
-|---|---|---|
-| `JWT_SECRET` | valor *dev-only* | Clave HS256 (mínimo 32 bytes). **Cámbiala fuera de desarrollo** (`openssl rand -base64 48`) |
-| `JWT_EXPIRATION` | `1h` | Validez del token |
-| `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | `bitbox_inventory` / `bitbox` / `bitbox` | Base de datos |
-| `POSTGRES_PORT` | `5432` | Puerto publicado de PostgreSQL en el host |
-
-Parar y borrar los datos:
+### Producción
 
 ```bash
-docker compose down -v
+cp .env.example .env    # rellenar JWT_SECRET y DB_PASSWORD (nunca se versiona: .env está en .gitignore)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
 ```
+
+- **Solo se expone el gateway (8080).** inventory-service y PostgreSQL están en una red Docker `internal`, sin puertos publicados ni salida a Internet.
+- `JWT_SECRET` y `DB_PASSWORD` son **obligatorios**: si faltan, Compose aborta. Además inventory se niega a arrancar si falta el secreto o si tiene menos de 32 bytes.
+- No se activa el perfil `dev`, así que no hay ningún valor por defecto inseguro.
+
+| Variable | Desarrollo | Producción | Descripción |
+|---|---|---|---|
+| `JWT_SECRET` | valor *dev-only* del perfil `dev` | **obligatoria** | Clave HS256 (≥ 32 bytes): `openssl rand -base64 48` |
+| `DB_PASSWORD` | `bitbox` | **obligatoria** | Contraseña de PostgreSQL |
+| `DB_NAME` / `DB_USERNAME` | `bitbox_inventory` / `bitbox` | opcionales | Base de datos |
+| `JWT_EXPIRATION` | `1h` | opcional | Validez del token |
+| `POSTGRES_PORT` | `5432` | (no se publica) | Puerto de depuración en el host |
 
 ### Ejecutar sin Docker (desarrollo)
 
-Con un PostgreSQL local accesible en `localhost:5432` (o solo `docker compose up -d postgres`):
+Con un PostgreSQL local en `localhost:5432` (o solo `docker compose up -d postgres`):
 
 ```bash
-./mvnw -pl inventory-service spring-boot:run
+./mvnw -pl inventory-service spring-boot:run -Dspring-boot.run.profiles=dev
 ./mvnw -pl ticket-gateway-service spring-boot:run
 ```
+
+Sin el perfil `dev`, inventory exige `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` y `JWT_SECRET`.
 
 ### DevContainer
 
@@ -108,12 +114,14 @@ Los errores siguen el formato RFC 7807 (`application/problem+json`) con una prop
 
 | Status | `code` | Cuándo |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | Body inválido (incluye `errors` por campo) |
-| 401 | `INVALID_CREDENTIALS` / `MISSING_BEARER_TOKEN` / `UNAUTHORIZED` | Login fallido, sin token, o token inválido o expirado |
+| 400 | `VALIDATION_ERROR` | Body inválido (incluye `errors` por campo). Solo se valida **después** de autenticar |
+| 401 | `AUTHENTICATION_REQUIRED` / `MISSING_BEARER_TOKEN` | Sin token (inventory / gateway). Incluye `WWW-Authenticate: Bearer` |
+| 401 | `INVALID_TOKEN` / `INVALID_CREDENTIALS` | Token inválido, manipulado o expirado / login fallido |
+| 403 | `ACCESS_DENIED` | Autenticado pero sin permiso. El enunciado no define roles, así que hoy ningún endpoint lo produce, pero el formato está preparado |
 | 404 | `EVENT_NOT_FOUND` | Evento inexistente |
 | 409 | `EMAIL_ALREADY_REGISTERED` | Email duplicado |
-| 409 | `SOLD_OUT` | No quedan entradas |
-| 409 | `PURCHASE_CONFLICT` | Contención extrema: se agotaron los reintentos. **Reintentable** |
+| 409 | `SOLD_OUT` | **Falta real de inventario** (definitivo) |
+| 503 | `PURCHASE_TEMPORARILY_UNAVAILABLE` | **Fallo transitorio** de concurrencia en la BD (timeout de lock, deadlock). No se vendió nada; reintentable (`Retry-After: 1`) |
 | 503 / 504 | `INVENTORY_UNAVAILABLE` / `INVENTORY_TIMEOUT` | El gateway no puede contactar con inventory o este no responde a tiempo |
 
 ---
@@ -161,13 +169,24 @@ seq 100 | xargs -P 100 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST $GW
 
 ## Concurrencia: cómo se evita la sobreventa
 
-El endpoint de compra usa **optimistic locking** con el campo `@Version` de `Event`, junto con dos redes de seguridad:
+La compra (`PurchaseService`) es **una sola transacción** con un **`UPDATE` atómico condicional**:
 
-1. **Cada intento es una transacción corta.** Se lee el evento, se descuenta 1 entrada y se hace `flush`. En ese momento Hibernate ejecuta `UPDATE events … WHERE id = ? AND version = ?`. Si otro comprador confirmó antes, la versión ya no coincide, la actualización afecta a 0 filas y toda la transacción (descuento y venta) se revierte.
-2. **Reintento acotado fuera de la transacción**, con backoff exponencial y *jitter*. Cada reintento relee datos frescos. Si ya no queda stock, se responde `409 SOLD_OUT`. Si se agota el presupuesto de reintentos, se responde `409 PURCHASE_CONFLICT` (reintentable), de modo que un conflicto nunca se confunde con "agotado". Se usa `TransactionOperations` en lugar de `@Transactional` para garantizar una transacción nueva por intento sin depender de la auto-invocación de proxies.
-3. **Restricción `CHECK (available_tickets BETWEEN 0 AND total_tickets)`** en PostgreSQL (Liquibase). Aunque hubiera un bug en la aplicación, la base de datos nunca aceptaría stock negativo.
+```sql
+UPDATE events SET available_tickets = available_tickets - 1, version = version + 1
+ WHERE id = ? AND available_tickets > 0
+```
 
-Alternativas evaluadas: el lock pesimista (`SELECT … FOR UPDATE`) también es correcto, pero bloquea la fila durante toda la transacción y deja `@Version` sin uso. El `UPDATE` atómico condicional es el más rápido, pero se salta el modelo de entidades. Los locks en memoria (`synchronized`) fallan con varias instancias, y un lock distribuido en Redis es infraestructura innecesaria cuando la base de datos ya es la fuente de verdad.
+1. **Sin sobreventa ni reintentos.** PostgreSQL toma un lock de fila para el `UPDATE`. Los compradores simultáneos del mismo evento esperan en ese lock y, cuando la transacción anterior confirma, **reevalúan el `WHERE` sobre el valor ya confirmado**. Al llegar a 0, la condición deja de cumplirse.
+2. **Transaccionalidad.** El descuento de stock y el `INSERT` en `ticket_sales` están en el mismo `@Transactional`: o se confirman ambos o ninguno (lo verifica `PurchaseAtomicityTest`).
+3. **Falta real vs. fallo transitorio.**
+   - 0 filas actualizadas con el evento existente → `409 SOLD_OUT`, que es definitivo.
+   - Un fallo de concurrencia de la BD (por ejemplo, `lock_timeout` de 5 s o un deadlock) → `503 PURCHASE_TEMPORARILY_UNAVAILABLE` con `Retry-After`. En ese caso no se vendió nada.
+4. **`@Version` se conserva.** El `UPDATE` incrementa `version`, así que el optimistic locking sigue protegiendo cualquier otra modificación del evento hecha a través de JPA.
+5. **`CHECK (available_tickets BETWEEN 0 AND total_tickets)`** en PostgreSQL como última red de seguridad.
+
+**Por qué no optimistic locking con reintentos** (la primera versión): con mucha contención sobre una sola fila, casi todas las transacciones fallan la comprobación de versión. Hacen falta reintentos y, con un presupuesto acotado, compradores legítimos pueden fallar aunque quede stock. Aumentar los reintentos solo desplaza el problema. El `UPDATE` condicional convierte la contención en espera, no en fallo.
+
+Otras alternativas descartadas: `SELECT … FOR UPDATE` (correcto, pero es una ida y vuelta extra con el mismo efecto), `synchronized` (falla con varias instancias) y un lock distribuido en Redis (infraestructura innecesaria: la BD ya es la fuente de verdad).
 
 ---
 
@@ -192,8 +211,10 @@ Requiere Docker en marcha: los tests de inventory usan **PostgreSQL real con Tes
 
 | Módulo | Test | Qué demuestra |
 |---|---|---|
-| inventory | `PurchaseConcurrencyTest` | 50 compradores para 10 entradas venden exactamente 10. La última entrada se vende una sola vez entre 20 compradores. Con N = stock, los reintentos no pierden ventas. Con 30 peticiones HTTP concurrentes reales (JWT incluido) hay exactamente 5 × 201 y 25 × 409. En todos los casos se comprueba `available_tickets = 0` y que `COUNT(ticket_sales)` es igual al stock |
-| inventory | `PurchaseServiceRetryTest` | La política de reintentos y que un conflicto agotado da `PURCHASE_CONFLICT`, no `SOLD_OUT` |
+| inventory | `PurchaseConcurrencyTest` | 50 compradores para 10 entradas venden exactamente 10. La última entrada se vende una sola vez entre 20 compradores. Con N = stock se venden todas. 200 compradores para 100 entradas → 100 ventas y `version = 100`. Dos eventos en paralelo no interfieren. Con 30 peticiones HTTP concurrentes reales (JWT incluido) hay exactamente 5 × 201 y 25 × 409. En todos los casos se comprueba `available_tickets = 0` y que `COUNT(ticket_sales)` es igual al stock |
+| inventory | `PurchaseAtomicityTest` | Si falla el registro de la venta, el descuento de stock se revierte |
+| inventory | `PurchaseServiceTest` | Clasificación de desenlaces: agotado (409), evento inexistente (404) y fallo transitorio (503) |
+| inventory | `GlobalExceptionHandlerTest`, `SecurityResponsesTest`, `JwtConfigTest` | Traducción centralizada a HTTP. Orden 401 → 400 y formato de 401/403. El servicio no arranca sin `JWT_SECRET` ni con uno débil |
 | inventory | `PurchaseIntegrationTest`, `EventIntegrationTest`, `AuthIntegrationTest` | Flujos principales, hash BCrypt, validación de JWT (sin token o manipulado → 401), errores 400/404/409, y que `/stats` no queda público por la regla de `/{id}` |
 | inventory | `StatsIntegrationTest` | Valores de la consulta nativa: ocupación, compradores únicos, empates en el ranking y eventos sin ventas |
 | gateway | `InventoryClientTest` | Propagación del header `Authorization`, relay de status y body de error, 503 si inventory está caído y 504 por timeout |
@@ -207,7 +228,10 @@ Requiere Docker en marcha: los tests de inventory usan **PostgreSQL real con Tes
 `.github/workflows/ci.yml` se ejecuta en cada push y pull request:
 
 1. **Build & test**: `./mvnw -B verify` con JDK 17, que compila ambos módulos y ejecuta todos los tests, incluidos los de concurrencia con Testcontainers.
-2. **Docker**: `docker compose build` construye las dos imágenes. Después se levanta el stack (`up --wait`) y se ejecuta un smoke test a través del gateway (registro, login, compra 201 y compra agotada 409).
+2. **Docker**:
+   - Valida que la configuración de producción rechaza arrancar sin secretos y que solo publica el puerto 8080.
+   - Construye las dos imágenes.
+   - Levanta el stack de desarrollo (`up --wait`) y ejecuta un smoke test a través del gateway: registro, login, compra 201 y compra agotada 409.
 
 ---
 
@@ -216,7 +240,10 @@ Requiere Docker en marcha: los tests de inventory usan **PostgreSQL real con Tes
 ```
 ├── pom.xml                       # aggregator (parent: spring-boot-starter-parent)
 ├── mvnw, .mvn/                   # Maven Wrapper
-├── docker-compose.yml, .env.example
+├── docker-compose.yml            # base: solo el gateway es público, red interna para inventory + postgres
+├── docker-compose.override.yml   # desarrollo (se carga solo): perfil dev, puertos 8081/5432
+├── docker-compose.prod.yml       # producción: secretos obligatorios
+├── .env.example                  # plantilla de variables de producción (.env nunca se versiona)
 ├── .github/workflows/ci.yml
 ├── .devcontainer/devcontainer.json
 ├── inventory-service/
@@ -225,11 +252,11 @@ Requiere Docker en marcha: los tests de inventory usan **PostgreSQL real con Tes
 │       ├── auth/     registro, login, DTOs
 │       ├── user/     entidad User
 │       ├── event/    entidad Event (@Version), creación y consulta
-│       ├── sale/     entidad TicketSale, compra concurrente con reintentos
-│       ├── stats/    consulta SQL nativa de estadísticas
+│       ├── sale/     entidad TicketSale, compra concurrente (UPDATE atómico condicional)
+│       ├── stats/    StatsService + consulta SQL nativa en el repositorio
 │       ├── security/ emisión y validación de JWT
 │       ├── config/   seguridad, OpenAPI, reloj
-│       └── common/   errores RFC 7807
+│       └── common/   BusinessException y traducción centralizada a HTTP (RFC 7807)
 │   └── src/main/resources/db/changelog/  migraciones Liquibase
 └── ticket-gateway-service/
     ├── Dockerfile
