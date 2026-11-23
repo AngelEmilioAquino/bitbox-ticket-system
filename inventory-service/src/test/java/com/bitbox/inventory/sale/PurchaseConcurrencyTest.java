@@ -18,7 +18,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.bitbox.inventory.common.ApiException;
+import com.bitbox.inventory.common.BusinessException;
 import com.bitbox.inventory.event.Event;
 import com.bitbox.inventory.support.IntegrationTest;
 import com.bitbox.inventory.user.User;
@@ -50,7 +50,7 @@ class PurchaseConcurrencyTest extends IntegrationTest {
             try {
                 purchaseService.purchase(event.getId(), users.get(i).getId());
                 return "SOLD";
-            } catch (ApiException ex) {
+            } catch (BusinessException ex) {
                 return ex.getCode();
             }
         });
@@ -71,7 +71,7 @@ class PurchaseConcurrencyTest extends IntegrationTest {
             try {
                 purchaseService.purchase(event.getId(), users.get(i).getId());
                 return "SOLD";
-            } catch (ApiException ex) {
+            } catch (BusinessException ex) {
                 return ex.getCode();
             }
         });
@@ -96,7 +96,7 @@ class PurchaseConcurrencyTest extends IntegrationTest {
             try {
                 purchaseService.purchase(event.getId(), users.get(i).getId());
                 return "SOLD";
-            } catch (ApiException ex) {
+            } catch (BusinessException ex) {
                 return ex.getCode();
             }
         });
@@ -118,7 +118,7 @@ class PurchaseConcurrencyTest extends IntegrationTest {
             try {
                 purchaseService.purchase(event.getId(), users.get(i).getId());
                 return "SOLD";
-            } catch (ApiException ex) {
+            } catch (BusinessException ex) {
                 return ex.getCode();
             }
         });
@@ -144,7 +144,7 @@ class PurchaseConcurrencyTest extends IntegrationTest {
             try {
                 purchaseService.purchase(eventId, users.get(i).getId());
                 return "SOLD";
-            } catch (ApiException ex) {
+            } catch (BusinessException ex) {
                 return ex.getCode();
             }
         });

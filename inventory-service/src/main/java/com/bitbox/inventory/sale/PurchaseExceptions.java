@@ -1,17 +1,16 @@
 package com.bitbox.inventory.sale;
 
-import com.bitbox.inventory.common.ApiException;
-import org.springframework.http.HttpStatus;
+import com.bitbox.inventory.common.BusinessException;
 
 public final class PurchaseExceptions {
 
     private PurchaseExceptions() {
     }
 
-    /** No stock left: the definitive "no" required by the spec (409). */
-    public static class SoldOutException extends ApiException {
+    /** Real lack of stock: the definitive "no". */
+    public static class SoldOutException extends BusinessException {
         public SoldOutException(Long eventId) {
-            super(HttpStatus.CONFLICT, "SOLD_OUT", "No tickets available for event " + eventId);
+            super("SOLD_OUT", "No tickets available for event " + eventId);
         }
     }
 
@@ -19,18 +18,18 @@ public final class PurchaseExceptions {
      * The database could not complete the purchase because of a transient concurrency failure
      * (lock timeout, deadlock...). Nothing was sold; stock may still be available, so the client may retry.
      */
-    public static class PurchaseTemporarilyUnavailableException extends ApiException {
+    public static class PurchaseTemporarilyUnavailableException extends BusinessException {
         public PurchaseTemporarilyUnavailableException(Long eventId, Throwable cause) {
-            super(HttpStatus.SERVICE_UNAVAILABLE, "PURCHASE_TEMPORARILY_UNAVAILABLE",
-                    "The purchase for event " + eventId + " could not be completed due to high contention. Please retry.");
-            initCause(cause);
+            super("PURCHASE_TEMPORARILY_UNAVAILABLE",
+                    "The purchase for event " + eventId + " could not be completed due to high contention. Please retry.",
+                    cause);
         }
     }
 
     /** Valid signature but the user no longer exists (e.g. database was reset). */
-    public static class BuyerNotFoundException extends ApiException {
+    public static class BuyerNotFoundException extends BusinessException {
         public BuyerNotFoundException() {
-            super(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "The authenticated user does not exist");
+            super("USER_NOT_FOUND", "The authenticated user does not exist");
         }
     }
 }

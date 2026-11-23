@@ -1,23 +1,22 @@
 package com.bitbox.inventory.auth;
 
-import com.bitbox.inventory.common.ApiException;
-import org.springframework.http.HttpStatus;
+import com.bitbox.inventory.common.BusinessException;
 
 public final class AuthExceptions {
 
     private AuthExceptions() {
     }
 
-    public static class EmailAlreadyRegisteredException extends ApiException {
+    public static class EmailAlreadyRegisteredException extends BusinessException {
         public EmailAlreadyRegisteredException() {
-            super(HttpStatus.CONFLICT, "EMAIL_ALREADY_REGISTERED", "The email is already registered");
+            super("EMAIL_ALREADY_REGISTERED", "The email is already registered");
         }
     }
 
     /** Same message for unknown email and wrong password, to avoid user enumeration. */
-    public static class InvalidCredentialsException extends ApiException {
+    public static class InvalidCredentialsException extends BusinessException {
         public InvalidCredentialsException() {
-            super(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid email or password");
+            super("INVALID_CREDENTIALS", "Invalid email or password");
         }
     }
 }

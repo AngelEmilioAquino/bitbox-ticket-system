@@ -1,7 +1,6 @@
 package com.bitbox.inventory.security;
 
-import com.bitbox.inventory.common.ApiException;
-import org.springframework.http.HttpStatus;
+import com.bitbox.inventory.common.BusinessException;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 /** Extracts the buyer identity from an already-validated JWT. */
@@ -18,9 +17,9 @@ public final class AuthenticatedUser {
         }
     }
 
-    public static class InvalidTokenSubjectException extends ApiException {
+    public static class InvalidTokenSubjectException extends BusinessException {
         public InvalidTokenSubjectException() {
-            super(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN_SUBJECT", "The token does not identify a valid user");
+            super("INVALID_TOKEN_SUBJECT", "The token does not identify a valid user");
         }
     }
 }
