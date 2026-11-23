@@ -1,5 +1,6 @@
 package com.bitbox.inventory.config;
 
+import com.bitbox.inventory.security.ProblemDetailSecurityHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,11 +12,17 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+/**
+ * Request processing order: Spring Security filter chain (authentication → 401, authorization → 403)
+ * runs before the DispatcherServlet, so request-body binding and Bean Validation (→ 400) only happen
+ * for authenticated and authorized requests.
+ */
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   ProblemDetailSecurityHandler problemDetailHandler) throws Exception {
         http
                 // Stateless token API: no session, no cookies, so CSRF protection does not apply
                 .csrf(AbstractHttpConfigurer::disable)
@@ -28,7 +35,14 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health/**", "/error").permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+                // Token validation is delegated entirely to Spring Security's resource server (no custom filter)
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(Customizer.withDefaults())
+                        .authenticationEntryPoint(problemDetailHandler)
+                        .accessDeniedHandler(problemDetailHandler))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(problemDetailHandler)
+                        .accessDeniedHandler(problemDetailHandler));
         return http.build();
     }
 

@@ -43,7 +43,10 @@ public class TicketController {
     /**
      * The gateway only checks that a bearer token is present (fail fast, no useless upstream call) and
      * propagates it unchanged. Cryptographic validation happens in inventory-service, the only holder of
-     * the signing secret.
+     * the signing secret, so it is not duplicated here.
+     *
+     * <p>The body is taken as a {@code Mono}: it is read and validated only when subscribed, i.e. after the
+     * token check. A request without a token therefore gets 401, never a validation 400.</p>
      */
     @PostMapping("/buy")
     @ResponseStatus(HttpStatus.CREATED)
@@ -58,11 +61,11 @@ public class TicketController {
     public Mono<PurchaseResponse> buy(
             @Parameter(hidden = true) @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
             String authorization,
-            @Valid @RequestBody BuyTicketRequest request) {
+            @Valid @RequestBody Mono<BuyTicketRequest> request) {
         if (!hasBearerToken(authorization)) {
             return Mono.error(GatewayException.missingBearerToken());
         }
-        return inventoryClient.purchase(request.eventId(), authorization);
+        return request.flatMap(body -> inventoryClient.purchase(body.eventId(), authorization));
     }
 
     @GetMapping(path = "/stream/{eventId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

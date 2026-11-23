@@ -128,6 +128,16 @@ class GatewayApiTest {
     }
 
     @Test
+    void buyWithoutTokenAndInvalidBodyIs401NotValidation400() {
+        webTestClient.post().uri("/api/tickets/buy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.code").isEqualTo("MISSING_BEARER_TOKEN");
+    }
+
+    @Test
     void buyValidatesBody() {
         webTestClient.post().uri("/api/tickets/buy")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer t")
