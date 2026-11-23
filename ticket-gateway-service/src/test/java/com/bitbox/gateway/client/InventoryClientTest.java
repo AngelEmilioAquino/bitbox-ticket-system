@@ -28,6 +28,9 @@ import reactor.test.StepVerifier;
  */
 class InventoryClientTest {
 
+    /** Large enough to absorb cold-start latency on busy CI machines; only slowInventoryBecomes504 tests timeouts. */
+    private static final Duration GENEROUS_TIMEOUT = Duration.ofSeconds(10);
+
     private final AtomicReference<ClientRequest> lastRequest = new AtomicReference<>();
 
     @Test
@@ -75,7 +78,7 @@ class InventoryClientTest {
         // Same exception the Reactor Netty connector raises when the TCP connection is refused
         InventoryClient client = new InventoryClient(webClient(request -> Mono.error(new WebClientRequestException(
                 new ConnectException("refused"), request.method(), request.url(), request.headers()))),
-                Duration.ofSeconds(1));
+                GENEROUS_TIMEOUT);
 
         StepVerifier.create(client.login(new LoginRequest("a@b.com", "x")))
                 .expectErrorSatisfies(error -> {
@@ -98,7 +101,7 @@ class InventoryClientTest {
     }
 
     private InventoryClient clientReturning(ClientResponse response) {
-        return new InventoryClient(webClient(request -> Mono.just(response)), Duration.ofSeconds(1));
+        return new InventoryClient(webClient(request -> Mono.just(response)), GENEROUS_TIMEOUT);
     }
 
     private WebClient webClient(ExchangeFunction exchange) {
