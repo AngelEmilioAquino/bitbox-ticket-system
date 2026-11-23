@@ -31,9 +31,9 @@ public class Event {
     private Integer availableTickets;
 
     /**
-     * Optimistic locking: Hibernate issues {@code UPDATE ... WHERE id = ? AND version = ?}.
-     * If another transaction changed the row first, 0 rows match and the update fails,
-     * so two buyers can never both take the same last ticket.
+     * Optimistic locking for entity-based updates: Hibernate issues {@code UPDATE ... WHERE id = ? AND version = ?}
+     * and fails if another transaction changed the row first. The purchase path does not modify the entity;
+     * it uses an atomic conditional UPDATE that also increments this version, so both mechanisms stay consistent.
      */
     @Version
     @Column(name = "version", nullable = false)
@@ -51,19 +51,6 @@ public class Event {
         this.eventDate = eventDate;
         this.totalTickets = totalTickets;
         this.availableTickets = totalTickets;
-    }
-
-    /**
-     * Takes one ticket from the stock.
-     *
-     * @return {@code false} if the event is sold out (the stock is left untouched)
-     */
-    public boolean tryReserveTicket() {
-        if (availableTickets <= 0) {
-            return false;
-        }
-        availableTickets--;
-        return true;
     }
 
     public Long getId() {

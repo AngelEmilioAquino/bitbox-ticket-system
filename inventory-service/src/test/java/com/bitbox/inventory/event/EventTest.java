@@ -17,15 +17,6 @@ class EventTest {
     }
 
     @Test
-    void reservingNeverGoesBelowZero() {
-        Event event = new Event("Concierto", LocalDateTime.now(), 1);
-
-        assertThat(event.tryReserveTicket()).isTrue();
-        assertThat(event.tryReserveTicket()).isFalse();
-        assertThat(event.getAvailableTickets()).isZero();
-    }
-
-    @Test
     void rejectsNonPositiveInventory() {
         assertThatThrownBy(() -> new Event("Concierto", LocalDateTime.now(), 0))
                 .isInstanceOf(IllegalArgumentException.class);

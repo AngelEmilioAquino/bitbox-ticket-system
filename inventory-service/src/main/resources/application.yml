@@ -8,6 +8,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/bitbox_inventory}
     username: ${DB_USERNAME:bitbox}
     password: ${DB_PASSWORD:bitbox}
+    hikari:
+      # Bounds how long a purchase may wait for the event row lock under extreme contention;
+      # exceeding it is reported as a retryable 503 instead of hanging the request.
+      connection-init-sql: SET lock_timeout TO '5s'
   jpa:
     # Lazy associations + OSIV hide N+1 queries and keep connections busy for the whole request
     open-in-view: false
@@ -27,12 +31,6 @@ security:
     secret: ${JWT_SECRET:dev-only-insecure-secret-change-me-0123456789}
     expiration: ${JWT_EXPIRATION:1h}
     issuer: bitbox-inventory-service
-
-purchase:
-  retry:
-    max-attempts: ${PURCHASE_MAX_ATTEMPTS:10}
-    initial-backoff: 5ms
-    max-backoff: 100ms
 
 management:
   endpoints:

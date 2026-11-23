@@ -2,32 +2,33 @@ package com.bitbox.inventory.sale;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.concurrent.ThreadLocalRandom;
 
-import com.bitbox.inventory.event.Event;
 import com.bitbox.inventory.event.EventNotFoundException;
 import com.bitbox.inventory.event.EventRepository;
 import com.bitbox.inventory.sale.PurchaseExceptions.BuyerNotFoundException;
-import com.bitbox.inventory.sale.PurchaseExceptions.PurchaseConflictException;
+import com.bitbox.inventory.sale.PurchaseExceptions.PurchaseTemporarilyUnavailableException;
 import com.bitbox.inventory.sale.PurchaseExceptions.SoldOutException;
 import com.bitbox.inventory.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Concurrency-safe ticket purchase based on optimistic locking ({@code @Version} on {@link Event}).
+ * Concurrency-safe ticket purchase.
  *
- * <p>Each attempt runs in its own short transaction: read event, decrement stock, flush (the version check
- * happens here), insert the sale. Stock decrement and sale insert commit or roll back together.
- * If another buyer committed first, the version check fails, the whole attempt is rolled back and
- * retried with fresh data. The retry loop lives <strong>outside</strong> the transaction on purpose:
- * retrying inside it would reuse a stale persistence context and could never succeed.</p>
+ * <p>Stock is taken with an atomic conditional {@code UPDATE} (see
+ * {@link EventRepository#decrementAvailableTickets(Long)}) and the {@link TicketSale} is inserted in the
+ * <strong>same transaction</strong>: both commit together or neither does.</p>
  *
- * <p>{@link TransactionOperations} is used instead of {@code @Transactional} so each attempt gets a
- * new transaction without relying on proxy self-invocation.</p>
+ * <p>Two different outcomes are kept apart on purpose:</p>
+ * <ul>
+ *   <li><b>Real lack of stock</b> → {@link SoldOutException} (definitive, HTTP 409).</li>
+ *   <li><b>Transient concurrency failure</b> (lock timeout, deadlock, serialization failure) →
+ *       {@link PurchaseTemporarilyUnavailableException} (retryable, HTTP 503). Nothing was sold and the
+ *       stock is untouched because the transaction rolled back.</li>
+ * </ul>
  */
 @Service
 public class PurchaseService {
@@ -37,67 +38,43 @@ public class PurchaseService {
     private final EventRepository eventRepository;
     private final TicketSaleRepository ticketSaleRepository;
     private final UserRepository userRepository;
-    private final TransactionOperations transactionOperations;
-    private final PurchaseRetryProperties retryProperties;
     private final Clock clock;
 
     public PurchaseService(EventRepository eventRepository,
                            TicketSaleRepository ticketSaleRepository,
                            UserRepository userRepository,
-                           TransactionOperations transactionOperations,
-                           PurchaseRetryProperties retryProperties,
                            Clock clock) {
         this.eventRepository = eventRepository;
         this.ticketSaleRepository = ticketSaleRepository;
         this.userRepository = userRepository;
-        this.transactionOperations = transactionOperations;
-        this.retryProperties = retryProperties;
         this.clock = clock;
     }
 
+    @Transactional
     public PurchaseResponse purchase(Long eventId, Long userId) {
         if (!userRepository.existsById(userId)) {
             throw new BuyerNotFoundException();
         }
-        for (int attempt = 1; ; attempt++) {
-            try {
-                return transactionOperations.execute(status -> purchaseOnce(eventId, userId));
-            } catch (OptimisticLockingFailureException conflict) {
-                if (attempt >= retryProperties.maxAttempts()) {
-                    log.warn("Purchase for event {} gave up after {} optimistic-locking conflicts", eventId, attempt);
-                    throw new PurchaseConflictException(eventId);
-                }
-                log.debug("Optimistic-locking conflict on event {} (attempt {}), retrying", eventId, attempt);
-                backoff(attempt, eventId);
-            }
-        }
-    }
-
-    private PurchaseResponse purchaseOnce(Long eventId, Long userId) {
-        Event event = eventRepository.findById(eventId).orElseThrow(() -> new EventNotFoundException(eventId));
-        if (!event.tryReserveTicket()) {
-            throw new SoldOutException(eventId);
-        }
-        // Flush now: UPDATE ... WHERE version = ? fails fast here if someone else bought first,
-        // before we insert the sale.
-        eventRepository.saveAndFlush(event);
-
-        TicketSale sale = ticketSaleRepository.save(
-                new TicketSale(event, userRepository.getReferenceById(userId), LocalDateTime.now(clock)));
-
-        return new PurchaseResponse(sale.getId(), eventId, userId, sale.getPurchaseDate(),
-                event.getAvailableTickets());
-    }
-
-    private void backoff(int attempt, Long eventId) {
-        long cap = Math.min(retryProperties.maxBackoff().toMillis(),
-                retryProperties.initialBackoff().toMillis() * (1L << Math.min(attempt - 1, 20)));
-        long sleepMillis = ThreadLocalRandom.current().nextLong(cap + 1);
         try {
-            Thread.sleep(sleepMillis);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new PurchaseConflictException(eventId);
+            if (eventRepository.decrementAvailableTickets(eventId) == 0) {
+                // 0 rows: either the event does not exist or its stock is exhausted
+                if (!eventRepository.existsById(eventId)) {
+                    throw new EventNotFoundException(eventId);
+                }
+                throw new SoldOutException(eventId);
+            }
+
+            TicketSale sale = ticketSaleRepository.save(new TicketSale(
+                    eventRepository.getReferenceById(eventId),
+                    userRepository.getReferenceById(userId),
+                    LocalDateTime.now(clock)));
+
+            // Reads our own (still uncommitted) update; the row stays locked by this transaction
+            Integer availableTickets = eventRepository.findAvailableTicketsById(eventId);
+            return new PurchaseResponse(sale.getId(), eventId, userId, sale.getPurchaseDate(), availableTickets);
+        } catch (ConcurrencyFailureException transientFailure) {
+            log.warn("Transient concurrency failure buying event {}: {}", eventId, transientFailure.getMessage());
+            throw new PurchaseTemporarilyUnavailableException(eventId, transientFailure);
         }
     }
 }

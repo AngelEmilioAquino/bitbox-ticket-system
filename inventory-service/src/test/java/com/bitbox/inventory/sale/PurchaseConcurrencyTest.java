@@ -83,8 +83,8 @@ class PurchaseConcurrencyTest extends IntegrationTest {
     }
 
     /**
-     * As many buyers as tickets: every purchase must succeed. Guards against the retry strategy
-     * losing legitimate sales (an optimistic conflict must never be reported as "sold out").
+     * As many buyers as tickets: every purchase must succeed. Contention alone must never turn into a
+     * failure while stock remains (this is what made optimistic locking + bounded retries fragile).
      */
     @Test
     void retriesDoNotLoseLegitimateSales() throws Exception {
@@ -104,6 +104,55 @@ class PurchaseConcurrencyTest extends IntegrationTest {
         assertThat(count(outcomes, "SOLD")).isEqualTo(tickets);
         assertThat(availableTickets(event.getId())).isZero();
         assertThat(salesCount(event.getId())).isEqualTo(tickets);
+    }
+
+    /** High demand with a large stock: 200 simultaneous buyers for 100 tickets, version tracks every sale. */
+    @Test
+    void highContentionSellsExactlyTheStockAndKeepsVersionConsistent() throws Exception {
+        int tickets = 100;
+        int buyers = 200;
+        Event event = createEvent("Big rush", tickets);
+        List<User> users = createUsers(buyers);
+
+        Map<String, AtomicInteger> outcomes = runConcurrently(buyers, i -> {
+            try {
+                purchaseService.purchase(event.getId(), users.get(i).getId());
+                return "SOLD";
+            } catch (ApiException ex) {
+                return ex.getCode();
+            }
+        });
+
+        assertThat(count(outcomes, "SOLD")).isEqualTo(tickets);
+        assertThat(count(outcomes, "SOLD_OUT")).isEqualTo(buyers - tickets);
+        assertThat(outcomes).containsOnlyKeys("SOLD", "SOLD_OUT");
+        assertThat(availableTickets(event.getId())).isZero();
+        assertThat(salesCount(event.getId())).isEqualTo(tickets);
+        assertThat(jdbcTemplate.queryForObject("SELECT version FROM events WHERE id = ?", Long.class, event.getId()))
+                .isEqualTo((long) tickets);
+    }
+
+    /** Concurrent purchases on different events do not interfere with each other. */
+    @Test
+    void concurrentPurchasesOnDifferentEventsAreIndependent() throws Exception {
+        Event first = createEvent("First", 5);
+        Event second = createEvent("Second", 15);
+        List<User> users = createUsers(40);
+
+        runConcurrently(40, i -> {
+            Long eventId = i % 2 == 0 ? first.getId() : second.getId();
+            try {
+                purchaseService.purchase(eventId, users.get(i).getId());
+                return "SOLD";
+            } catch (ApiException ex) {
+                return ex.getCode();
+            }
+        });
+
+        assertThat(salesCount(first.getId())).isEqualTo(5);
+        assertThat(salesCount(second.getId())).isEqualTo(15);
+        assertThat(availableTickets(first.getId())).isZero();
+        assertThat(availableTickets(second.getId())).isZero();
     }
 
     /** End-to-end through HTTP (security filter, JWT, controller, error handler): 201s plus 409s. */

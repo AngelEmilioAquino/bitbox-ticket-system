@@ -16,13 +16,14 @@ public final class PurchaseExceptions {
     }
 
     /**
-     * Stock may still exist, but the purchase lost every optimistic-locking race within the retry budget.
-     * Also 409, with a different code so clients know a retry may succeed.
+     * The database could not complete the purchase because of a transient concurrency failure
+     * (lock timeout, deadlock...). Nothing was sold; stock may still be available, so the client may retry.
      */
-    public static class PurchaseConflictException extends ApiException {
-        public PurchaseConflictException(Long eventId) {
-            super(HttpStatus.CONFLICT, "PURCHASE_CONFLICT",
-                    "High contention on event " + eventId + ", the purchase could not be completed. Please retry.");
+    public static class PurchaseTemporarilyUnavailableException extends ApiException {
+        public PurchaseTemporarilyUnavailableException(Long eventId, Throwable cause) {
+            super(HttpStatus.SERVICE_UNAVAILABLE, "PURCHASE_TEMPORARILY_UNAVAILABLE",
+                    "The purchase for event " + eventId + " could not be completed due to high contention. Please retry.");
+            initCause(cause);
         }
     }
 
