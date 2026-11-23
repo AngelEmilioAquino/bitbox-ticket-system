@@ -1,0 +1,23 @@
+# DEVELOPMENT overlay, loaded automatically by `docker compose up` (no -f flags needed).
+# Uses the public, predictable dev credentials from the `dev` Spring profile. Never use it in production.
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bitbox}
+    ports:
+      # Debug access from the host (psql, IDE). Not published in production.
+      - "${POSTGRES_PORT:-5432}:5432"
+    # Published ports need a non-internal network
+    networks:
+      - public
+
+  inventory-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_PASSWORD: ${DB_PASSWORD:-bitbox}
+    ports:
+      # Direct access for creating events / reading stats from the host. Not published in production.
+      - "8081:8081"
+    networks:
+      - public

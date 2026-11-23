@@ -40,9 +40,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate production compose config
+        run: |
+          set -euo pipefail
+          P="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+          # Must refuse to render without secrets
+          if $P config > /dev/null 2>&1; then echo "prod config accepted missing secrets"; exit 1; fi
+          # Only the gateway port may be published
+          PORTS=$(JWT_SECRET=ci DB_PASSWORD=ci $P config --format json | jq -r '[.services[].ports[]?.published] | sort | join(",")')
+          test "$PORTS" = "8080" || { echo "unexpected published ports: $PORTS"; exit 1; }
+
       - name: Build Docker images
         run: docker compose build
 
+      # Development stack (docker-compose.override.yml is loaded automatically)
       - name: Start the stack and wait until healthy
         run: docker compose up -d --wait
 

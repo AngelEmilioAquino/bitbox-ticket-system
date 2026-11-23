@@ -1,0 +1,22 @@
+# PRODUCTION overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
+#
+# - Secrets are mandatory: compose aborts if JWT_SECRET or DB_PASSWORD are not set (env or .env file).
+# - No Spring dev profile, no default credentials.
+# - Only ticket-gateway-service publishes a port (defined in the base file); inventory-service and
+#   postgres stay on the internal network.
+
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set for production}
+
+  inventory-service:
+    restart: unless-stopped
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set for production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set for production (openssl rand -base64 48)}
+
+  ticket-gateway-service:
+    restart: unless-stopped
