@@ -180,7 +180,7 @@ UPDATE events SET available_tickets = available_tickets - 1, version = version +
 2. **Transaccionalidad.** El descuento de stock y el `INSERT` en `ticket_sales` están en el mismo `@Transactional`: o se confirman ambos o ninguno (lo verifica `PurchaseAtomicityTest`).
 3. **Falta real vs. fallo transitorio.**
    - 0 filas actualizadas con el evento existente → `409 SOLD_OUT`, que es definitivo.
-   - Un fallo de concurrencia de la BD (por ejemplo, `lock_timeout` de 5 s o un deadlock) → `503 PURCHASE_TEMPORARILY_UNAVAILABLE` con `Retry-After`. En ese caso no se vendió nada.
+   - Un fallo de concurrencia de la BD (por ejemplo, `lock_timeout` de 3 s o un deadlock) → `503 PURCHASE_TEMPORARILY_UNAVAILABLE` con `Retry-After`. En ese caso no se vendió nada.
 4. **`@Version` se conserva.** El `UPDATE` incrementa `version`, así que el optimistic locking sigue protegiendo cualquier otra modificación del evento hecha a través de JPA.
 5. **`CHECK (available_tickets BETWEEN 0 AND total_tickets)`** en PostgreSQL como última red de seguridad.
 

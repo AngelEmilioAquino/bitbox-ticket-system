@@ -12,8 +12,9 @@ gateway:
   inventory:
     base-url: ${INVENTORY_BASE_URL:http://localhost:8081}
     connect-timeout: 2s
-    # Upper bound for a whole call to inventory-service (connect + response + body)
-    timeout: ${INVENTORY_TIMEOUT:5s}
+    # Upper bound for a whole call to inventory-service (connect + response + body).
+    # Kept above inventory lock_timeout (3s) and cold-start latency of the first request (~3s measured).
+    timeout: ${INVENTORY_TIMEOUT:10s}
   stream:
     interval: 2s
 
