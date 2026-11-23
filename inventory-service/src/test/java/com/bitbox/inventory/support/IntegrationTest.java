@@ -24,7 +24,14 @@ import java.time.LocalDateTime;
  * <p>The container is started once per JVM (singleton pattern) and shared by every test class,
  * which also lets Spring reuse a single application context.</p>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        // The application has no default secrets; tests supply throwaway values.
+        // The datasource values are placeholders: @ServiceConnection points the app at the Testcontainers DB.
+        "security.jwt.secret=test-only-secret-not-used-anywhere-else-0123456789",
+        "spring.datasource.url=jdbc:postgresql://overridden-by-testcontainers/db",
+        "spring.datasource.username=overridden",
+        "spring.datasource.password=overridden"
+})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
 

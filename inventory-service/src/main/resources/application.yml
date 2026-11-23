@@ -5,9 +5,9 @@ spring:
   application:
     name: inventory-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/bitbox_inventory}
-    username: ${DB_USERNAME:bitbox}
-    password: ${DB_PASSWORD:bitbox}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     hikari:
       # Bounds how long a purchase may wait for the event row lock under extreme contention;
       # exceeding it is reported as a retryable 503 instead of hanging the request.
@@ -27,8 +27,8 @@ spring:
 
 security:
   jwt:
-    # DEV-ONLY default so the project starts out of the box. Override JWT_SECRET in any real environment.
-    secret: ${JWT_SECRET:dev-only-insecure-secret-change-me-0123456789}
+    # REQUIRED, no default: the app refuses to start without it (dev values live in application-dev.yml)
+    secret: ${JWT_SECRET}
     expiration: ${JWT_EXPIRATION:1h}
     issuer: bitbox-inventory-service
 
