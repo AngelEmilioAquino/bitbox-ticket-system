@@ -77,6 +77,18 @@ Sin el perfil `dev`, inventory exige `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` y `J
 
 ---
 
+## Colección de Postman
+
+En la raíz: [`BITBOX-Ticket-System.postman_collection.json`](BITBOX-Ticket-System.postman_collection.json).
+
+1. Postman → **Import** → selecciona el archivo.
+2. Con el entorno levantado, ejecuta las carpetas en orden, o la colección completa con **Run collection**. Desmarca la carpeta 6 (stream SSE infinito).
+
+- El **login guarda el token** automáticamente y **crear evento guarda `eventId`**; no hay que copiar nada a mano.
+- Cada ejecución registra un email nuevo, así que la colección se puede repetir.
+- Cada petición incluye tests: flujo feliz (registro → login → evento → 3 compras → `409 SOLD_OUT` → estadísticas) y errores esperados (401, 400, 404, 409).
+- Las URLs son variables de la colección: `gatewayUrl` (8080) e `inventoryUrl` (8081).
+
 ## Documentación OpenAPI (Swagger UI)
 
 | Servicio | Swagger UI | OpenAPI JSON |

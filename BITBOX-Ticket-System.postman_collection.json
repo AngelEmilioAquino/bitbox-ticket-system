@@ -1,0 +1,319 @@
+{
+  "info": {
+    "name": "BITBOX Ticket System",
+    "description": "Endpoints de ticket-gateway-service (8080) e inventory-service (8081).\n\nUso: levanta el entorno con `docker compose up -d --build --wait` y ejecuta las carpetas en orden (o la colección completa con el Collection Runner). El login guarda el token automáticamente en la variable `token` y la creación de evento guarda `eventId`.\n\nCada ejecución registra un email nuevo, así que la colección se puede repetir sin errores de email duplicado.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "gatewayUrl", "value": "http://localhost:8080" },
+    { "key": "inventoryUrl", "value": "http://localhost:8081" },
+    { "key": "email", "value": "" },
+    { "key": "password", "value": "S3cret-pass" },
+    { "key": "token", "value": "" },
+    { "key": "eventId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Autenticación (gateway)",
+      "item": [
+        {
+          "name": "Registrar usuario",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.collectionVariables.set('email', `ana+${Date.now()}@bitbox.com`);"
+              ] }
+            },
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "pm.test('Devuelve id y email', () => {",
+                "  const body = pm.response.json();",
+                "  pm.expect(body.id).to.be.a('number');",
+                "  pm.expect(body.email).to.eql(pm.collectionVariables.get('email'));",
+                "});"
+              ] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{gatewayUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Login (guarda el token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const token = pm.response.json().accessToken;",
+                "pm.test('Devuelve un JWT', () => pm.expect(token).to.be.a('string').and.not.empty);",
+                "pm.collectionVariables.set('token', token);"
+              ] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{gatewayUrl}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Eventos (inventory)",
+      "item": [
+        {
+          "name": "Crear evento (3 entradas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const body = pm.response.json();",
+                "pm.test('Inventario inicial completo', () => pm.expect(body.availableTickets).to.eql(body.totalTickets));",
+                "pm.collectionVariables.set('eventId', body.id);"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Concierto BITBOX\",\n  \"eventDate\": \"2027-03-15T20:00:00\",\n  \"totalTickets\": 3\n}" },
+            "url": "{{inventoryUrl}}/api/events"
+          }
+        },
+        {
+          "name": "Consultar evento (público)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "pm.test('Es el evento creado', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('eventId'))));"
+              ] }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{inventoryUrl}}/api/events/{{eventId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Compra (gateway)",
+      "item": [
+        {
+          "name": "Comprar entrada 1/3",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 Created', () => pm.response.to.have.status(201));",
+            "pm.test('Quedan 2', () => pm.expect(pm.response.json().availableTickets).to.eql(2));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"eventId\": {{eventId}}\n}" },
+            "url": "{{gatewayUrl}}/api/tickets/buy"
+          }
+        },
+        {
+          "name": "Comprar entrada 2/3",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 Created', () => pm.response.to.have.status(201));",
+            "pm.test('Queda 1', () => pm.expect(pm.response.json().availableTickets).to.eql(1));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"eventId\": {{eventId}}\n}" },
+            "url": "{{gatewayUrl}}/api/tickets/buy"
+          }
+        },
+        {
+          "name": "Comprar entrada 3/3",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 Created', () => pm.response.to.have.status(201));",
+            "pm.test('Quedan 0', () => pm.expect(pm.response.json().availableTickets).to.eql(0));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"eventId\": {{eventId}}\n}" },
+            "url": "{{gatewayUrl}}/api/tickets/buy"
+          }
+        },
+        {
+          "name": "Comprar con evento agotado → 409 SOLD_OUT",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+            "pm.test('code = SOLD_OUT', () => pm.expect(pm.response.json().code).to.eql('SOLD_OUT'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"eventId\": {{eventId}}\n}" },
+            "url": "{{gatewayUrl}}/api/tickets/buy"
+          }
+        },
+        {
+          "name": "Compra directa en inventory (agotado) → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409 Conflict', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{inventoryUrl}}/api/events/{{eventId}}/purchase"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Estadísticas (inventory)",
+      "item": [
+        {
+          "name": "Estadísticas por evento",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const stats = pm.response.json().find(s => s.eventId === Number(pm.collectionVariables.get('eventId')));",
+            "pm.test('El evento aparece al 100% de ocupación', () => {",
+            "  pm.expect(stats.ticketsSold).to.eql(3);",
+            "  pm.expect(stats.occupancyPercentage).to.eql(100);",
+            "  pm.expect(stats.uniqueBuyers).to.eql(1);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "url": "{{inventoryUrl}}/api/events/stats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Errores esperados",
+      "item": [
+        {
+          "name": "Registro con email duplicado → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+            "pm.test('code = EMAIL_ALREADY_REGISTERED', () => pm.expect(pm.response.json().code).to.eql('EMAIL_ALREADY_REGISTERED'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{gatewayUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Login con contraseña incorrecta → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+            "pm.test('code = INVALID_CREDENTIALS', () => pm.expect(pm.response.json().code).to.eql('INVALID_CREDENTIALS'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"wrong-password\"\n}" },
+            "url": "{{gatewayUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Comprar sin token → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+            "pm.test('code = MISSING_BEARER_TOKEN', () => pm.expect(pm.response.json().code).to.eql('MISSING_BEARER_TOKEN'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"eventId\": {{eventId}}\n}" },
+            "url": "{{gatewayUrl}}/api/tickets/buy"
+          }
+        },
+        {
+          "name": "Crear evento con token inválido → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+            "pm.test('code = INVALID_TOKEN', () => pm.expect(pm.response.json().code).to.eql('INVALID_TOKEN'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "not.a.valid.token", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"X\",\n  \"eventDate\": \"2027-03-15T20:00:00\",\n  \"totalTickets\": 1\n}" },
+            "url": "{{inventoryUrl}}/api/events"
+          }
+        },
+        {
+          "name": "Crear evento con datos inválidos → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+            "pm.test('code = VALIDATION_ERROR', () => pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR'));",
+            "pm.test('Detalle por campo', () => pm.expect(pm.response.json().errors).to.have.all.keys('name', 'eventDate', 'totalTickets'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"\",\n  \"totalTickets\": 0\n}" },
+            "url": "{{inventoryUrl}}/api/events"
+          }
+        },
+        {
+          "name": "Evento inexistente → 404",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+            "pm.test('code = EVENT_NOT_FOUND', () => pm.expect(pm.response.json().code).to.eql('EVENT_NOT_FOUND'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{inventoryUrl}}/api/events/999999"
+          }
+        },
+        {
+          "name": "Estadísticas sin token → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{inventoryUrl}}/api/events/stats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Tiempo real (manual, no usar en el Runner)",
+      "description": "Stream SSE infinito: un evento 'availability' cada 2 segundos. Ejecútalo manualmente y deténlo con Cancel. En el Collection Runner, desmarca esta carpeta.",
+      "item": [
+        {
+          "name": "Stream de disponibilidad (SSE)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "text/event-stream" }],
+            "url": "{{gatewayUrl}}/api/tickets/stream/{{eventId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
