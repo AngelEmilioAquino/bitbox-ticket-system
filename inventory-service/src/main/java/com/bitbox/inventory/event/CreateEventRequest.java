@@ -9,7 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record CreateEventRequest(
-        @Schema(example = "Concierto BITBOX 2027")
+        @Schema(example = "Black Friday (IKEA) 2027")
         @NotBlank @Size(max = 255) String name,
 
         @Schema(example = "2027-03-15T20:00:00")

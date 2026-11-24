@@ -44,9 +44,6 @@ public class TicketController {
      * The gateway only checks that a bearer token is present (fail fast, no useless upstream call) and
      * propagates it unchanged. Cryptographic validation happens in inventory-service, the only holder of
      * the signing secret, so it is not duplicated here.
-     *
-     * <p>The body is taken as a {@code Mono}: it is read and validated only when subscribed, i.e. after the
-     * token check. A request without a token therefore gets 401, never a validation 400.</p>
      */
     @PostMapping("/buy")
     @ResponseStatus(HttpStatus.CREATED)

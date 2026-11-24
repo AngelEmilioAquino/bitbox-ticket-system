@@ -34,7 +34,6 @@ public class TicketSale {
     private User user;
 
     protected TicketSale() {
-        // required by JPA
     }
 
     public TicketSale(Event event, User user, LocalDateTime purchaseDate) {

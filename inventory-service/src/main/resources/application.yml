@@ -9,10 +9,6 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      # Bounds how long a purchase may wait for the event row lock under extreme contention.
-      # Must stay well below the gateway's INVENTORY_TIMEOUT (10s) so inventory gives a definitive answer
-      # (sale committed, or 503 with nothing sold) before the gateway gives up with an ambiguous 504;
-      # exceeding it is reported as a retryable 503 instead of hanging the request.
       connection-init-sql: SET lock_timeout TO '3s'
   jpa:
     # Lazy associations + OSIV hide N+1 queries and keep connections busy for the whole request

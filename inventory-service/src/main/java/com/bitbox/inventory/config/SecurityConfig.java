@@ -12,11 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-/**
- * Request processing order: Spring Security filter chain (authentication → 401, authorization → 403)
- * runs before the DispatcherServlet, so request-body binding and Bean Validation (→ 400) only happen
- * for authenticated and authorized requests.
- */
+/** Request processing order: Spring Security filter chain (authentication 401, authorization 403)*/
 @Configuration
 public class SecurityConfig {
 
@@ -29,13 +25,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
-                        // Must be declared BEFORE "/api/events/{id}": "stats" would otherwise match {id} and be public
                         .requestMatchers(HttpMethod.GET, "/api/events/stats").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/events/{id}").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health/**", "/error").permitAll()
                         .anyRequest().authenticated())
-                // Token validation is delegated entirely to Spring Security's resource server (no custom filter)
+                // Token validation is delegated entirely to Spring Security's resource server
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(Customizer.withDefaults())
                         .authenticationEntryPoint(problemDetailHandler)

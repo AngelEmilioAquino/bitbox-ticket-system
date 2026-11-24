@@ -2,7 +2,7 @@ package com.bitbox.inventory.stats;
 
 import java.math.BigDecimal;
 
-/** Interface projection for the native statistics query (column aliases match the getters). */
+/** Interface projection for the native statistics query. */
 public interface EventStatsView {
 
     Long getEventId();

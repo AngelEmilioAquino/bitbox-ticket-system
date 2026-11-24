@@ -40,7 +40,6 @@ public class Event {
     private Long version;
 
     protected Event() {
-        // required by JPA
     }
 
     public Event(String name, LocalDateTime eventDate, int totalTickets) {

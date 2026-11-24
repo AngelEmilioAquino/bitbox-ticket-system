@@ -10,14 +10,11 @@ public interface EventStatsRepository extends Repository<Event, Long> {
 
     /**
      * Per-event sales statistics in a single round trip.
-     * <ul>
-     *   <li>CTE {@code sales_per_event}: joins ticket_sales with users and aggregates sold tickets
-     *       ({@code COUNT}) and unique buyers ({@code COUNT(DISTINCT)}) per event.</li>
-     *   <li>{@code LEFT JOIN} from events so events without sales still appear (with zeros).</li>
-     *   <li>{@code NULLIF} guards the occupancy division.</li>
-     *   <li>{@code RANK() OVER} ranks events by tickets sold (ties share the same rank).</li>
-     * </ul>
-     * Aliases are double-quoted so PostgreSQL keeps their camelCase for the projection.
+     CTE {@code sales_per_event}: joins ticket_sales with users and aggregates sold tickets
+     ({@code COUNT}) and unique buyers ({@code COUNT(DISTINCT)}) per event.
+     {@code LEFT JOIN} from events so events without sales still appear (with zeros).
+     {@code NULLIF} guards the occupancy division.
+     {@code RANK() OVER} ranks events by tickets sold (ties share the same rank).
      */
     @Query(nativeQuery = true, value = """
             WITH sales_per_event AS (

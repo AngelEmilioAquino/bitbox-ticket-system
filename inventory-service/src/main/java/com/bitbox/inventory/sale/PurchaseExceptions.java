@@ -7,17 +7,13 @@ public final class PurchaseExceptions {
     private PurchaseExceptions() {
     }
 
-    /** Real lack of stock: the definitive "no". */
     public static class SoldOutException extends BusinessException {
         public SoldOutException(Long eventId) {
             super("SOLD_OUT", "No tickets available for event " + eventId);
         }
     }
 
-    /**
-     * The database could not complete the purchase because of a transient concurrency failure
-     * (lock timeout, deadlock...). Nothing was sold; stock may still be available, so the client may retry.
-     */
+    /** The database could not complete the purchase because of a transient concurrency failure */
     public static class PurchaseTemporarilyUnavailableException extends BusinessException {
         public PurchaseTemporarilyUnavailableException(Long eventId, Throwable cause) {
             super("PURCHASE_TEMPORARILY_UNAVAILABLE",
@@ -26,7 +22,7 @@ public final class PurchaseExceptions {
         }
     }
 
-    /** Valid signature but the user no longer exists (e.g. database was reset). */
+    /** Valid signature but the user no longer exists. */
     public static class BuyerNotFoundException extends BusinessException {
         public BuyerNotFoundException() {
             super("USER_NOT_FOUND", "The authenticated user does not exist");

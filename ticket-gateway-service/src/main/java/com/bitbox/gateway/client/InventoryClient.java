@@ -20,10 +20,7 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
-/**
- * The only place that talks to inventory-service. Every call is non-blocking and goes through
- * {@link #handleErrors(Mono)}, which turns technical failures into meaningful gateway errors.
- */
+/** The only place that talks to inventory-service. Every call is non-blocking and goes through the reactive WebClient.*/
 @Component
 public class InventoryClient {
 
@@ -85,7 +82,9 @@ public class InventoryClient {
     }
 
     private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
-        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+        for (Throwable cause = ex; cause != null;
+             cause = cause.getCause())
+        {
             if (type.isInstance(cause)) {
                 return true;
             }

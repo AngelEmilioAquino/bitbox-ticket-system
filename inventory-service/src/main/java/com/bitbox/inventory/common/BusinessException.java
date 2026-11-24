@@ -1,10 +1,6 @@
 package com.bitbox.inventory.common;
 
-/**
- * Base class for expected business errors. It carries a stable, machine-readable {@code code} and a
- * human-readable message, and knows nothing about the transport: the translation to HTTP status codes
- * lives exclusively in {@link GlobalExceptionHandler}.
- */
+/** Global error and human-readable message, and knows nothing about the transport: the translation to HTTP status codes */
 public abstract class BusinessException extends RuntimeException {
 
     private final String code;

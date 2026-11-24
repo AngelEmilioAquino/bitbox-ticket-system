@@ -7,16 +7,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface EventRepository extends JpaRepository<Event, Long> {
 
-    /**
-     * Atomic conditional decrement: a single {@code UPDATE ... WHERE available_tickets > 0}.
-     *
-     * <p>PostgreSQL takes a row lock for the update; concurrent buyers of the same event queue on that lock and,
-     * once the previous transaction commits, re-evaluate the {@code WHERE} clause against the committed row.
-     * When the stock reaches zero the condition stops matching, so overselling is impossible and no
-     * application-level retry is needed. {@code version} is incremented too, so the {@code @Version}
-     * optimistic lock still protects any other JPA-based modification of the event.</p>
-     *
-     * @return 1 if a ticket was taken, 0 if the event is sold out or does not exist
+    /** Atomic conditional decrement: a single {@code UPDATE ... WHERE available_tickets > 0}.
+     PostgreSQL takes a row lock for the update; concurrent buyers of the same event queue on that lock and,
+     once the previous transaction commits, re-evaluate the {@code WHERE} clause against the committed row.
+     @return 1 if a ticket was taken, 0 if the event is sold out or does not exist
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""

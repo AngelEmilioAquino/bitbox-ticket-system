@@ -18,12 +18,10 @@ public class User {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    /** Always a BCrypt hash, never the raw password. */
     @Column(name = "password", nullable = false)
     private String password;
 
     protected User() {
-        // required by JPA
     }
 
     public User(String email, String passwordHash) {

@@ -15,20 +15,12 @@ import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Concurrency-safe ticket purchase.
- *
- * <p>Stock is taken with an atomic conditional {@code UPDATE} (see
- * {@link EventRepository#decrementAvailableTickets(Long)}) and the {@link TicketSale} is inserted in the
- * <strong>same transaction</strong>: both commit together or neither does.</p>
- *
- * <p>Two different outcomes are kept apart on purpose:</p>
- * <ul>
- *   <li><b>Real lack of stock</b> → {@link SoldOutException} (definitive, HTTP 409).</li>
- *   <li><b>Transient concurrency failure</b> (lock timeout, deadlock, serialization failure) →
- *       {@link PurchaseTemporarilyUnavailableException} (retryable, HTTP 503). Nothing was sold and the
- *       stock is untouched because the transaction rolled back.</li>
- * </ul>
+/** Concurrency-safe ticket purchase.
+ * decrements the number of available tickets and creates a purchase record.
+ * If the number of available tickets is 0, throws SoldOutException.
+ * If the event is not found, throws EventNotFoundException.
+ * If the user is not found, throws BuyerNotFoundException.
+ * If the purchase cannot be completed due to concurrency issues, throws PurchaseTemporarilyUnavailableException
  */
 @Service
 public class PurchaseService {
@@ -69,7 +61,7 @@ public class PurchaseService {
                     userRepository.getReferenceById(userId),
                     LocalDateTime.now(clock)));
 
-            // Reads our own (still uncommitted) update; the row stays locked by this transaction
+            // Reads our own update; the row stays locked by this transaction
             Integer availableTickets = eventRepository.findAvailableTicketsById(eventId);
             return new PurchaseResponse(sale.getId(), eventId, userId, sale.getPurchaseDate(), availableTickets);
         } catch (ConcurrencyFailureException transientFailure) {

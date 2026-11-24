@@ -2,7 +2,6 @@
   "name": "bitbox-ticket-system",
   "image": "mcr.microsoft.com/devcontainers/java:1-17",
   "features": {
-    // Docker is required by Testcontainers and docker compose
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
   "forwardPorts": [8080, 8081, 5432],

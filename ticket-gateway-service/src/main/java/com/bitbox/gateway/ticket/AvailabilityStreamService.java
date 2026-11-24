@@ -16,14 +16,9 @@ import reactor.core.publisher.Mono;
 
 /**
  * Real-time availability: polls inventory-service every {@code interval} and emits one SSE per tick.
- *
- * <ul>
- *   <li>The first lookup happens before the stream starts, so an unknown event yields a plain HTTP 404
- *       instead of an endless stream of errors.</li>
- *   <li>{@code concatMap} keeps polls sequential: a slow inventory response never causes overlapping calls.</li>
- *   <li>A transient failure becomes an {@code error} SSE and the stream keeps going on the next tick.</li>
- *   <li>When the client disconnects the subscription is cancelled and polling stops.</li>
- * </ul>
+ * flux is hot and will emit the latest availability for the given eventId to all subscribers.
+ * Mono is used to emit the first availability event immediately, then Flux.interval is used to poll for updates.
+ * If the poll fails, an error event is emitted with a message and code, but the flux continues to emit availability events on the next tick.
  */
 @Service
 public class AvailabilityStreamService {

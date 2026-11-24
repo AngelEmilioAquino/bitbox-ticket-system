@@ -1,6 +1,5 @@
 # Local development profile ONLY (SPRING_PROFILES_ACTIVE=dev).
 # These values are public and predictable on purpose; they must never be used outside a developer machine.
-# Any other environment must provide DB_URL, DB_USERNAME, DB_PASSWORD and JWT_SECRET explicitly.
 
 spring:
   datasource:

@@ -37,7 +37,7 @@ public class AuthService {
         User user = userRepository.save(new User(email, passwordEncoder.encode(request.password())));
         return new UserResponse(user.getId(), user.getEmail());
     }
-
+    
     @Transactional(readOnly = true)
     public TokenResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(normalize(request.email()))

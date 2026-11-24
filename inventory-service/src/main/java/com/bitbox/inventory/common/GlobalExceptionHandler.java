@@ -25,15 +25,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-/**
- * Single place where business exceptions are translated to HTTP. Business code throws transport-agnostic
- * {@link BusinessException}s; this class decides the status and renders an RFC 7807 {@link ProblemDetail}
- * with the exception's stable {@code code}.
- */
+/** Single place where business exceptions are translated to HTTP. Business code throws transport-agnostic exceptions, and this class translates them to HTTP responses. */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-    /** Seconds a client should wait before retrying a purchase that failed for transient reasons. */
+    /* Seconds a client should wait before retrying a purchase that failed for transient reasons. */
     static final String RETRY_AFTER_SECONDS = "1";
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
@@ -54,7 +50,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(HttpStatus.UNAUTHORIZED, ex);
     }
 
-    /** Transient: nothing was sold and the client may retry (different from SOLD_OUT, which is final). */
+    /* Transient: nothing was sold and the client may retry (different from SOLD_OUT, which is final). */
     @ExceptionHandler(PurchaseTemporarilyUnavailableException.class)
     public ResponseEntity<ProblemDetail> handleTransient(BusinessException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -62,17 +58,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getCode(), ex.getMessage()));
     }
 
-    /** Safety net for a business exception that was not mapped above: a client error, never a 500. */
+    /* Safety net for a business exception that was not mapped above: a client error, never a 500. */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ProblemDetail> handleUnmapped(BusinessException ex) {
         log.warn("Unmapped business exception {} ({})", ex.getClass().getName(), ex.getCode());
         return respond(HttpStatus.BAD_REQUEST, ex);
     }
 
-    /**
-     * Last line of defence: a DB constraint (unique email, stock CHECK) rejected the write,
-     * e.g. two concurrent registrations with the same email.
-     */
+    /** Last line of defence: a DB constraint (unique email, stock CHECK) rejected the write. */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ProblemDetail> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
