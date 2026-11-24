@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+import com.bitbox.gateway.cache.AvailabilityCache;
 import com.bitbox.gateway.client.InventoryClient;
 import com.bitbox.gateway.client.dto.InventoryDtos.EventResponse;
 import com.bitbox.gateway.client.dto.InventoryDtos.PurchaseResponse;
@@ -17,6 +18,7 @@ import com.bitbox.gateway.client.dto.InventoryDtos.RegisterRequest;
 import com.bitbox.gateway.client.dto.InventoryDtos.UserResponse;
 import com.bitbox.gateway.error.DownstreamException;
 import com.bitbox.gateway.error.GatewayException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,8 +31,15 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-/** Full WebFlux stack (routing, validation, error handling, SSE) with inventory-service mocked out. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+/**
+ * Full WebFlux stack (routing, validation, error handling, SSE) with inventory-service and the Redis cache
+ * mocked out. The RabbitMQ listener is not started: this test is about HTTP, not messaging.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        "spring.rabbitmq.username=test",
+        "spring.rabbitmq.password=test",
+        "spring.rabbitmq.listener.simple.auto-startup=false"
+})
 @AutoConfigureWebTestClient
 class GatewayApiTest {
 
@@ -39,6 +48,16 @@ class GatewayApiTest {
 
     @MockitoBean
     private InventoryClient inventoryClient;
+
+    @MockitoBean
+    private AvailabilityCache availabilityCache;
+
+    /** Cache always misses, so the stream goes to the (mocked) inventory client. */
+    @BeforeEach
+    void emptyCache() {
+        when(availabilityCache.get(anyLong())).thenReturn(Mono.empty());
+        when(availabilityCache.put(any())).thenReturn(Mono.just(true));
+    }
 
     @Test
     void registerIsProxied() {

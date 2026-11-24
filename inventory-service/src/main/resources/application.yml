@@ -22,10 +22,16 @@ spring:
           time_zone: UTC
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    # REQUIRED outside the dev profile
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
 
 security:
   jwt:
-    # REQUIRED, no default: the app refuses to start without it (dev values live in application-dev.yml)
+    # REQUIRED, no default: the app refuses to start without it
     secret: ${JWT_SECRET}
     expiration: ${JWT_EXPIRATION:1h}
     issuer: bitbox-inventory-service
@@ -35,6 +41,10 @@ management:
     web:
       exposure:
         include: health
+  health:
+    # Purchases keep working if RabbitMQ is down (publishing is best effort), so it must not mark us unhealthy
+    rabbit:
+      enabled: false
 
 springdoc:
   swagger-ui:

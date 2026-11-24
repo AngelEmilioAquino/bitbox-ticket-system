@@ -1,7 +1,10 @@
 package com.bitbox.gateway.ticket;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,10 +14,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
+import com.bitbox.gateway.cache.AvailabilityCache;
 import com.bitbox.gateway.client.InventoryClient;
 import com.bitbox.gateway.client.dto.InventoryDtos.EventResponse;
 import com.bitbox.gateway.error.DownstreamException;
 import com.bitbox.gateway.error.GatewayException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.ServerSentEvent;
@@ -27,7 +32,15 @@ class AvailabilityStreamServiceTest {
     private static final Duration INTERVAL = Duration.ofSeconds(2);
 
     private final InventoryClient client = mock(InventoryClient.class);
+    private final AvailabilityCache cache = mock(AvailabilityCache.class);
     private final Clock clock = Clock.fixed(Instant.parse("2027-01-01T00:00:00Z"), ZoneOffset.UTC);
+
+    /** By default the cache is empty (always a miss) and accepts writes. */
+    @BeforeEach
+    void emptyCache() {
+        when(cache.get(anyLong())).thenReturn(Mono.empty());
+        when(cache.put(any())).thenReturn(Mono.just(true));
+    }
 
     @Test
     void emitsImmediatelyAndThenEveryTwoSeconds() {
@@ -46,6 +59,44 @@ class AvailabilityStreamServiceTest {
                 .verify();
 
         verify(client, times(3)).getEvent(1L);
+    }
+
+    @Test
+    void cacheHitDoesNotCallInventory() {
+        when(cache.get(1L)).thenReturn(Mono.just(event(5)));
+
+        StepVerifier.withVirtualTime(() -> service().availability(1L))
+                .assertNext(sse -> assertAvailable(sse, 5))
+                .thenAwait(INTERVAL)
+                .assertNext(sse -> assertAvailable(sse, 5))
+                .thenCancel()
+                .verify();
+
+        verify(client, never()).getEvent(anyLong());
+    }
+
+    @Test
+    void cacheMissFetchesFromInventoryAndStoresTheResult() {
+        EventResponse fresh = event(4);
+        when(client.getEvent(1L)).thenReturn(Mono.just(fresh));
+
+        StepVerifier.create(service().availability(1L).take(1))
+                .assertNext(sse -> assertAvailable(sse, 4))
+                .verifyComplete();
+
+        verify(cache).put(fresh);
+    }
+
+    /** Redis is an optimisation, never a dependency: if it fails, the stream keeps working through inventory. */
+    @Test
+    void redisFailureFallsBackToInventory() {
+        when(cache.get(1L)).thenReturn(Mono.error(new IllegalStateException("Redis down")));
+        when(cache.put(any())).thenReturn(Mono.error(new IllegalStateException("Redis down")));
+        when(client.getEvent(1L)).thenReturn(Mono.just(event(6)));
+
+        StepVerifier.create(service().availability(1L).take(1))
+                .assertNext(sse -> assertAvailable(sse, 6))
+                .verifyComplete();
     }
 
     @Test
@@ -76,7 +127,7 @@ class AvailabilityStreamServiceTest {
     }
 
     private AvailabilityStreamService service() {
-        return new AvailabilityStreamService(client, INTERVAL, clock);
+        return new AvailabilityStreamService(client, cache, INTERVAL, clock);
     }
 
     private static EventResponse event(int available) {

@@ -20,3 +20,4 @@ Thumbs.db
 
 # Original BITBOX assessment document: not to be published
 docs/*.pdf
+docs/*.md

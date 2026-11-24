@@ -11,6 +11,7 @@ import com.bitbox.inventory.sale.PurchaseExceptions.SoldOutException;
 import com.bitbox.inventory.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,15 +31,18 @@ public class PurchaseService {
     private final EventRepository eventRepository;
     private final TicketSaleRepository ticketSaleRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public PurchaseService(EventRepository eventRepository,
                            TicketSaleRepository ticketSaleRepository,
                            UserRepository userRepository,
+                           ApplicationEventPublisher eventPublisher,
                            Clock clock) {
         this.eventRepository = eventRepository;
         this.ticketSaleRepository = ticketSaleRepository;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -63,6 +67,9 @@ public class PurchaseService {
 
             // Reads our own update; the row stays locked by this transaction
             Integer availableTickets = eventRepository.findAvailableTicketsById(eventId);
+
+            // Delivered to listeners only if this transaction commits (see AvailabilityChangedPublisher)
+            eventPublisher.publishEvent(new TicketPurchasedEvent(eventId,availableTickets));
             return new PurchaseResponse(sale.getId(), eventId, userId, sale.getPurchaseDate(), availableTickets);
         } catch (ConcurrencyFailureException transientFailure) {
             log.warn("Transient concurrency failure buying event {}: {}", eventId, transientFailure.getMessage());

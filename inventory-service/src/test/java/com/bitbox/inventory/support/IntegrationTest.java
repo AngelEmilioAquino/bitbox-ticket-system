@@ -14,15 +14,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 import java.time.LocalDateTime;
 
 /**
  * Base for integration tests: real PostgreSQL (Testcontainers) so that Liquibase migrations, native SQL
  * (CTE / window functions) and row-level locking behave exactly as in production. H2 would not prove any of it.
- *
- * <p>The container is started once per JVM (singleton pattern) and shared by every test class,
- * which also lets Spring reuse a single application context.</p>
+ *The container is started once per JVM (singleton pattern) and shared by every test class,
+ * which also lets Spring reuse a single application context.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         // The application has no default secrets; tests supply throwaway values.
@@ -30,7 +30,9 @@ import java.time.LocalDateTime;
         "security.jwt.secret=test-only-secret-not-used-anywhere-else-0123456789",
         "spring.datasource.url=jdbc:postgresql://overridden-by-testcontainers/db",
         "spring.datasource.username=overridden",
-        "spring.datasource.password=overridden"
+        "spring.datasource.password=overridden",
+        "spring.rabbitmq.username=overridden",
+        "spring.rabbitmq.password=overridden"
 })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
@@ -38,8 +40,13 @@ public abstract class IntegrationTest {
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
 
+    /** Real broker so the after-commit publishing can be verified end to end. */
+    @ServiceConnection
+    static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:4-management-alpine");
+
     static {
         POSTGRES.start();
+        RABBIT.start();
     }
 
     @Autowired

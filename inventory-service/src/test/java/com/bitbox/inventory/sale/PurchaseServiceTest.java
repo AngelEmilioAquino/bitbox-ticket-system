@@ -17,6 +17,7 @@ import com.bitbox.inventory.sale.PurchaseExceptions.SoldOutException;
 import com.bitbox.inventory.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 
 /** Unit test: how each database outcome is classified (no database involved). */
@@ -26,7 +27,8 @@ class PurchaseServiceTest {
     private final TicketSaleRepository ticketSaleRepository = mock(TicketSaleRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PurchaseService service =
-            new PurchaseService(eventRepository, ticketSaleRepository, userRepository, Clock.systemUTC());
+            new PurchaseService(eventRepository, ticketSaleRepository, userRepository,
+                    mock(ApplicationEventPublisher.class), Clock.systemUTC());
 
     @BeforeEach
     void buyerExists() {

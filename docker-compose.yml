@@ -1,15 +1,3 @@
-# Base definition shared by every environment. Do not run it alone; use one of:
-#
-#   Development (default):  docker compose up -d --build --wait
-#       -> also loads docker-compose.override.yml automatically (dev profile, extra debug ports)
-#
-#   Production-like:        docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
-#       -> requires JWT_SECRET and DB_PASSWORD (see .env.example); only the gateway is reachable
-#
-# Network layout:
-#   public   : ticket-gateway-service only (the single published port, 8080)
-#   internal : gateway <-> inventory-service <-> postgres, with no route to/from the outside world
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -26,6 +14,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # Message broker: inventory publishes availability changes, the gateway consumes them
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-bitbox}
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Availability cache shared by every SSE subscriber of the gateway
+  redis:
+    image: redis:7-alpine
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   inventory-service:
     build:
       context: .
@@ -35,10 +48,14 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-bitbox_inventory}
       DB_USERNAME: ${DB_USERNAME:-bitbox}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-1h}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-bitbox}
     networks:
       - internal
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health"]
@@ -53,8 +70,11 @@ services:
       dockerfile: ticket-gateway-service/Dockerfile
     image: bitbox/ticket-gateway-service:latest
     environment:
-      # Service name on the internal network, not localhost
+      # Service names on the internal network, not localhost
       INVENTORY_BASE_URL: http://inventory-service:8081
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-bitbox}
+      REDIS_HOST: redis
     ports:
       - "8080:8080"
     networks:
@@ -62,6 +82,10 @@ services:
       - internal
     depends_on:
       inventory-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]

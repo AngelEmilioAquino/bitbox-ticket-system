@@ -8,7 +8,22 @@ services:
     ports:
       # Debug access from the host (psql, IDE). Not published in production.
       - "${POSTGRES_PORT:-5432}:5432"
-    # Published ports need a non-internal network
+    networks:
+      - public
+
+  rabbitmq:
+    environment:
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-bitbox}
+    ports:
+      # Management UI: http://localhost:15672 (user/password: bitbox/bitbox). Not published in production.
+      - "15672:15672"
+    networks:
+      - public
+
+  redis:
+    ports:
+      # Debug access: redis-cli -p 6379. Not published in production.
+      - "6379:6379"
     networks:
       - public
 
@@ -16,8 +31,14 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: dev
       DB_PASSWORD: ${DB_PASSWORD:-bitbox}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-bitbox}
     ports:
       # Direct access for creating events / reading stats from the host. Not published in production.
       - "8081:8081"
     networks:
       - public
+
+  ticket-gateway-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-bitbox}

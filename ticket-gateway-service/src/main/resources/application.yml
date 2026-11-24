@@ -7,6 +7,17 @@ spring:
   webflux:
     problemdetails:
       enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 1s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
 
 gateway:
   inventory:
@@ -17,12 +28,20 @@ gateway:
     timeout: ${INVENTORY_TIMEOUT:10s}
   stream:
     interval: 2s
+  cache:
+    ttl: 5s
 
 management:
   endpoints:
     web:
       exposure:
         include: health
+  health:
+    # Gateway health must reflect the gateway itself; Redis/RabbitMQ outages degrade features, not liveness
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false
 
 springdoc:
   swagger-ui:

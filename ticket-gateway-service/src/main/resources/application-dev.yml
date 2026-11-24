@@ -1,0 +1,6 @@
+# Local development profile ONLY (SPRING_PROFILES_ACTIVE=dev). Public, predictable values on purpose.
+
+spring:
+  rabbitmq:
+    username: ${RABBITMQ_USERNAME:bitbox}
+    password: ${RABBITMQ_PASSWORD:bitbox}

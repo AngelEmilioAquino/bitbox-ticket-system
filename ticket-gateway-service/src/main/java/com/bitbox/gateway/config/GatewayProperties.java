@@ -10,11 +10,15 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties("gateway")
-public record GatewayProperties(@Valid @NotNull Inventory inventory, @Valid @NotNull Stream stream) {
+public record GatewayProperties(@Valid @NotNull Inventory inventory, @Valid @NotNull Stream stream,
+                                @Valid @NotNull Cache cache) {
 
     public record Inventory(@NotBlank String baseUrl, @NotNull Duration connectTimeout, @NotNull Duration timeout) {
     }
 
     public record Stream(@NotNull Duration interval) {
+    }
+
+    public record Cache(@NotNull Duration ttl) {
     }
 }

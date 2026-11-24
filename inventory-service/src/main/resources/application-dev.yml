@@ -6,6 +6,9 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/bitbox_inventory}
     username: ${DB_USERNAME:bitbox}
     password: ${DB_PASSWORD:bitbox}
+  rabbitmq:
+    username: ${RABBITMQ_USERNAME:bitbox}
+    password: ${RABBITMQ_PASSWORD:bitbox}
 
 security:
   jwt:

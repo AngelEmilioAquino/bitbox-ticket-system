@@ -47,7 +47,7 @@ jobs:
           # Must refuse to render without secrets
           if $P config > /dev/null 2>&1; then echo "prod config accepted missing secrets"; exit 1; fi
           # Only the gateway port may be published
-          PORTS=$(JWT_SECRET=ci DB_PASSWORD=ci $P config --format json | jq -r '[.services[].ports[]?.published] | sort | join(",")')
+          PORTS=$(JWT_SECRET=ci DB_PASSWORD=ci RABBITMQ_PASSWORD=ci REDIS_PASSWORD=ci $P config --format json | jq -r '[.services[].ports[]?.published] | sort | join(",")')
           test "$PORTS" = "8080" || { echo "unexpected published ports: $PORTS"; exit 1; }
 
       - name: Build Docker images
