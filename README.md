@@ -13,7 +13,7 @@ Cliente ──▶ ticket-gateway-service :8080 (WebFlux/Netty) ──WebClient�
               ├─ /api/tickets/buy           (propaga Authorization: Bearer)
               └─ /api/tickets/stream/{id}   (Flux + SSE cada 2 s)
 ```
-[bitbox-architecture.excalidraw](./docs/bitbox-architecture-dev.excalidraw)
+[bitbox.png](./docs/bitbox.png)
 
 Versiones: **Java 17**, **Spring Boot 4.1.3**, springdoc-openapi 3.1.1, PostgreSQL 16.
 
